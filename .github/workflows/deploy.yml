@@ -1,31 +1,44 @@
-name: Deploy on GTBR Server
+name: Deploy gtbr-front to GTBR
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["master"]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Build and Push Image
-      run: |
-        docker build -t gtbr-auth-front .
-        docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-        docker tag gtbr-auth-front gtbr/gtbr-auth-front
-        docker push gtbr/gtbr-auth-front
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Deploy to GTBR Server
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USERNAME }}
-        password: ${{ secrets.SERVER_PASSWORD }}
-        script: |
-          docker stop gtbr-auth-front || true
-          docker rm gtbr-auth-front || true
-          docker pull gtbr/gtbr-auth-front
-          docker run -d -p 8083:3000 --name gtbr-auth-front gtbr/gtbr-auth-front
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: gtbr/gtbr-front:latest
+
+      - name: Deploy to GTBR Server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            docker stop gtbr-auth-front || true
+            docker rm gtbr-auth-front || true
+            docker pull gtbr/gtbr-front:latest
+            docker run -d --restart unless-stopped -p 3005:3000 --name gtbr-auth-front gtbr/gtbr-front:latest
